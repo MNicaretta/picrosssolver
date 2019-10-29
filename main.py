@@ -1,33 +1,122 @@
 from enum import Enum
-import numpy as np
 
-class Cell(Enum):
+class CellState(Enum):
     UNKNOWN = '.'
     EMPTY = ' '
-    FILL = '#'
+    BOX = '■'
 
-class PicrossState():
-    def __init__(self, state=None, columns=[], rows=[]):
-        self.board = np.full((10,10), Cell.UNKNOWN)
-        self.columns = columns
+    def __str__(self):
+        return self.value
+
+class Cell():
+    def __init__(self, state=CellState.UNKNOWN):
+        self.state = state
+
+    def __str__(self):
+        return self.state
+
+class Clue():
+    def __init__(self, value, filled=0):
+        self.value = value
+        self.filled = filled
+
+    def isFilled(self):
+        return self.remaining() == 0
+
+    def remaining(self):
+        return self.value - self.filled
+    
+    def __str__(self):
+        return str(self.value)
+
+class Clues():
+    def __init__(self, *clues):
+        self.clues = []
+
+        for c in clues:
+            self.clues.append(Clue(c))
+
+    def fillMin(self, start, end, mark):
+        space = sum(c.value + 1 for c in self.clues) - 1
+        left = end - start - space
+
+        index = 0
+
+        for c in self.clues:
+            if c.value > left:
+                fill = c.value - left
+                c.filled += fill
+                index += c.value - fill
+                for _ in range(fill):
+                    mark(index, CellState.BOX)
+                    index += 1
+                index += 1
+            else:
+                index += c.value + 1
+
+    def adjust(self, array):
+        if not self.isFilled():
+            for i in range(len(array)):
+                start = 0
+                end = 0
+
+
+        if self.isFilled():
+            for cell in array:
+                if cell.state == CellState.UNKNOWN:
+                    cell.state = CellState.EMPTY
+
+    def isFilled(self):
+        return all(c.isFilled() for c in self.clues)
+
+class Picross():
+    def __init__(self, rows=[], columns=[]):
         self.rows = rows
-        if state is not None:
-            for i in range(len(state.columns)):
-                self.columns[i] = state.columns[i]
-            for i in range(len(state.rows)):
-                self.rows[i] = state.rows[i]
-            for r in range(len(state.board)):
-                for c in range(len(state.board[r])):
-                    self.board[r][c] = state.board[r][c]
+        self.columns = columns
+
+        self.board = []
+        for _ in range(len(self.rows)):
+            array = []
+            for _ in range(len(self.columns)):
+                array.append(Cell())
+            self.board.append(array)
+
+    def isSolved(self):
+        return all(r.isFilled() for r in self.rows)
+
+    def set(self, r, c, state):
+        self.board[r][c].state = state
+
+    def solve(self):
+        self.fillMin()
+        print(self)
+
+        while not self.isSolved():
+            self.adjust()
+            print(self)
+
+    def fillMin(self):
+        for r in range(len(self.rows)):
+            self.rows[r].fillMin(0, len(self.columns), lambda index, state: self.set(r,index,state))
+
+        for c in range(len(self.columns)):
+            self.columns[c].fillMin(0, len(self.rows), lambda index, state: self.set(index,c,state))
+
+    def adjust(self):
+        for r in range(len(self.rows)):
+            self.rows[r].adjust(self.board[r])
+
+        for c in range(len(self.columns)):
+            self.columns[c].adjust(list(map(lambda row: row[c], self.board)))
 
     def __str__(self):
         result = ''
 
         for r in range(len(self.board)):
-            for c in range(len(self.board[r])):
-                result += self.board[r][c].value + ' '
-            for i in range(len(self.rows[r])):
-                result += str(self.rows[r][i]) + ' '
+            for cell in self.board[r]:
+                result += str(cell.state) + ' '
+            for clue in self.rows[r].clues:
+                result += str(clue) + ' '
             result += '\n'
 
         has_value = True
@@ -35,10 +124,10 @@ class PicrossState():
 
         while has_value:
             has_value = False
-            for i in range(len(self.columns)):
-                if len(self.columns[i]) > count:
+            for clues in self.columns:
+                if len(clues.clues) > count:
                     has_value = True
-                    result += str(self.columns[i][count]) + ' '
+                    result += str(clues.clues[count]) + ' '
                 else:
                     result += '  '
             result += '\n'
@@ -46,52 +135,8 @@ class PicrossState():
 
         return result
 
-def insert_obvious(state):
-    row_size = len(state.board)
-    column_size = len(state.board[0])
-
-    for r in range(row_size):
-        count = 0
-
-        for i in range(len(state.rows[r])):
-            count += state.rows[r][i]
-
-        count += len(state.rows[r]) - 1
-
-        if count == row_size:
-            c = 0
-            for i in range(len(state.rows[r])):
-                for _ in range(state.rows[r][i]):
-                    state.board[r][c] = Cell.FILL
-                    c += 1
-
-                if c < len(state.board[r]):
-                    state.board[r][c] = Cell.EMPTY
-                    c += 1
-
-    for c in range(column_size):
-        count = 0
-
-        for i in range(len(state.columns[c])):
-            count += state.columns[c][i]
-
-        count += len(state.columns[c]) - 1
-
-        if count == column_size:
-            r = 0
-            for i in range(len(state.columns[c])):
-                for _ in range(state.columns[c][i]):
-                    state.board[r][c] = Cell.FILL
-                    r += 1
-
-                if r < len(state.board):
-                    state.board[r][c] = Cell.EMPTY
-                    r += 1
-
-picross = PicrossState(None,
-                       [[1,1,2],   [2,1,1,1], [1,1,3], [3,3,1], [2,1,1,1], [1,2,1,1], [6,1],   [2,4],   [1,2,3,1], [1,1,1,1]],
-                       [[1,1,2,2], [2,1,2],   [8],     [2,3,1], [1,1,1],   [4,1,1],   [1,1,2], [1,1,2], [4,1,1],   [1,1,1,4]])
+picross = Picross([Clues(1,1,1),Clues(1,1),Clues(1,2),Clues(5),Clues(1,1,1)],
+                  [Clues(1,2),  Clues(3),  Clues(1,2),Clues(3),Clues(1,3)])
 
 print(picross)
-insert_obvious(picross)
-print(picross)
+picross.solve()
